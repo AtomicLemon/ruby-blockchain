@@ -1,1 +1,1 @@
-# Blockchain in Ruby
+# Simple Blockchain implementation in Ruby
