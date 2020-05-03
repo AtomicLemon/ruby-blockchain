@@ -1,17 +1,21 @@
-require_relative 'rubycoin'
 require 'faraday'
 
-URL = 'http://localhost'
-PORT = 9993
+class Client
+  URL = 'http://localhost'
 
-def create_user(name)
-  Faraday.post("#{URL}:#{PORT}/users", name: name).body
-end
+  def self.gossip(port, peers, blockchain)
+    begin
+      Faraday.post("#{URL}:#{port}/gossip", peers: peers, blockchain: blockchain).body
+    rescue Faraday::ConnectionFailed => e
+      raise
+    end
+  end
 
-def get_balance(user)
-  Faraday.get("#{URL}:#{PORT}/balance", user: user).body
-end
+  def self.get_pub_key(port)
+    Faraday.get("#{URL}:#{port}/pub_key").body
+  end
 
-def transfer(from, to, amount)
-  Faraday.post("#{URL}:#{PORT}/transfers", from: from, to: to, amount: amount).body
+  def self.send_money(port, to, amount)
+    Faraday.post("#{URL}:#{port}/send_money", to: to, amount: amount).body
+  end
 end
