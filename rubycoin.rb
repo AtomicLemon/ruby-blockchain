@@ -1,40 +1,55 @@
 require 'sinatra'
 require 'colorize'
+require 'active_support/time'
+require 'yaml'
+require_relative 'block'
+require_relative 'client'
+require_relative 'helpers'
 
-BALANCES = {
-  'haseeb' => 100_000,
-}
+PORT, PEER_PORT = ARGV.first(2)
+set :port, PORT
 
-def print_state
-  puts BALANCES.to_s.green
+$PEERS = ThreadSafe::Array.new([PORT])
+
+PRIV_KEY, PUB_KEY = PKI.generate_key_pair
+
+if PEER_PORT.nil?
+  # You are the progenitor!
+  $BLOCKCHAIN = BlockChain.new(PUB_KEY, PRIV_KEY)
+else
+  # You're just joining the network.
+  $PEERS << PEER_PORT
 end
 
-# @param user
-get "/balance" do
-  username = params['user'].downcase
-  print_state
-  "#{username} has #{BALANCES[username]}"
+every(3.seconds) do
+  $PEERS.dup.each do |port|
+    next if port == PORT
+
+    puts "Gossiping about blockchain and peers with #{port.to_s.green}"
+    gossip_with_peer(port)
+  end
+  render_state
 end
 
-# @param name
-post "/users" do
-  name = params['name'].downcase
-  BALANCES[name] ||= 0
-  print_state
-  "OK"
+# @param blockchain
+# @param peers
+post '/gossip' do
+  their_blockchain = YAML.load(params['blockchain'])
+  their_peers = YAML.load(params['peers'])
+  update_blockchain(their_blockchain)
+  update_peers(their_peers)
+  YAML.dump('peers' => $PEERS, 'blockchain' => $BLOCKCHAIN)
 end
 
-# @param from
-# @param to
+# @param to (port_number)
 # @param amount
-post "/transfers" do
-  from, to = params.values_at('from', 'to').map(&:downcase)
+post '/send_money' do
+  to = Client.get_pub_key(params['to'])
   amount = params['amount'].to_i
-  raise InsufficientFunds if BALANCES[from] < amount
-  BALANCES[from] -= amount
-  BALANCES[to] += amount
-  print_state
-  "OK"
+  $BLOCKCHAIN.add_to_chain(Transaction.new(PUB_KEY, to, amount, PRIV_KEY))
+  'OK. Block mined!'
 end
 
-class InsufficientFunds < StandardError; end
+get '/pub_key' do
+  PUB_KEY
+end
